@@ -16,7 +16,12 @@ function Check-WeakPermissions {
 # Check for unquoted service paths
 function Check-UnquotedServicePaths {
     Write-Output "Checking for unquoted service paths..."
-    Get-WmiObject win32_service | Where-Object { $_.PathName -match ' ' -and $_.PathName -notmatch '"' } | Select-Object Name, DisplayName, PathName
+    $services = Get-WmiObject win32_service | Where-Object { $_.StartMode -eq "Auto" }
+    foreach ($service in $services) {
+        if ($service.PathName -match '^[^"]+\s+[^"]+') {
+            Write-Output "Unquoted service path found: $($service.DisplayName) - $($service.PathName)"
+        }
+    }
 }
 
 # Check for services with weak permissions
