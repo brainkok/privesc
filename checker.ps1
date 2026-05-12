@@ -49,14 +49,14 @@ function Add-Finding {
         Detail   = $Detail
         Severity = $Severity
     })
-    Write-Finding -Message "$Title — $Detail" -Severity $Severity
+    Write-Finding -Message "$Title - $Detail" -Severity $Severity
 }
 
 # ============================================================
 Write-Header "SYSTEM INFORMATION"
 # ============================================================
 
-Write-Check "OS version & patch level"
+Write-Check "OS version and patch level"
 $os = Get-WmiObject Win32_OperatingSystem
 Write-Info "OS: $($os.Caption) $($os.Version) (Build $($os.BuildNumber))"
 Write-Info "Architecture: $($os.OSArchitecture)"
@@ -64,9 +64,9 @@ Write-Info "Last boot: $($os.LastBootUpTime)"
 
 $hotfixes = Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 5
 Write-Info "Last 5 patches:"
-$hotfixes | ForEach-Object { Write-Info "  KB$($_.HotFixID) — $($_.InstalledOn)" }
+$hotfixes | ForEach-Object { Write-Info "  KB$($_.HotFixID) - $($_.InstalledOn)" }
 
-Write-Check "Current user & privileges"
+Write-Check "Current user and privileges"
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 $isAdmin = ([System.Security.Principal.WindowsPrincipal]$currentUser).IsInRole(
     [System.Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -122,11 +122,11 @@ if ($consentPrompt -eq 0) {
     Add-Finding -Category "UAC" -Title "UAC prompt disabled for admins" -Detail "ConsentPromptBehaviorAdmin = 0" -Severity "HIGH"
 }
 if ($secureDesktop -eq 0) {
-    Add-Finding -Category "UAC" -Title "Secure Desktop disabled" -Detail "PromptOnSecureDesktop = 0 — relay attack possible" -Severity "MEDIUM"
+    Add-Finding -Category "UAC" -Title "Secure Desktop disabled" -Detail "PromptOnSecureDesktop = 0 - relay attack possible" -Severity "MEDIUM"
 }
 
 # ============================================================
-Write-Header "SERVICES — UNQUOTED PATHS"
+Write-Header "SERVICES - UNQUOTED PATHS"
 # ============================================================
 
 Write-Check "Services with unquoted service paths"
@@ -168,7 +168,7 @@ foreach ($svc in $services) {
 if (-not $services) { Write-Info "No unquoted service paths found." }
 
 # ============================================================
-Write-Header "SERVICES — WEAK PERMISSIONS"
+Write-Header "SERVICES - WEAK PERMISSIONS"
 # ============================================================
 
 Write-Check "Writable service executables"
@@ -199,7 +199,7 @@ foreach ($name in $svcNames) {
 }
 
 # ============================================================
-Write-Header "REGISTRY — AUTORUN & WEAK PERMISSIONS"
+Write-Header "REGISTRY - AUTORUN AND WEAK PERMISSIONS"
 # ============================================================
 
 Write-Check "AutoRun locations"
@@ -364,7 +364,7 @@ foreach ($f in $sensitiveFiles) {
 }
 
 # ============================================================
-Write-Header "NETWORK & SHARES"
+Write-Header "NETWORK AND SHARES"
 # ============================================================
 
 Write-Check "Local shared folders"
@@ -415,7 +415,7 @@ foreach ($baseDir in $programDirs) {
 }
 
 # ============================================================
-Write-Header "LOCAL USERS & GROUPS"
+Write-Header "LOCAL USERS AND GROUPS"
 # ============================================================
 
 Write-Check "Local Administrators"
@@ -430,7 +430,7 @@ $users = Get-LocalUser
 foreach ($user in $users) {
     $status   = if ($user.Enabled) { "Active" } else { "Disabled" }
     $pwExpiry = if ($user.PasswordExpires) { $user.PasswordExpires.ToString() } else { "Never" }
-    Write-Info "$($user.Name) [$status] — Password expires: $pwExpiry"
+    Write-Info "$($user.Name) [$status] - Password expires: $pwExpiry"
     if ($user.Enabled -and -not $user.PasswordRequired) {
         Add-Finding -Category "User" -Title "User with no password required" `
             -Detail $user.Name -Severity "HIGH"
@@ -441,7 +441,7 @@ foreach ($user in $users) {
 Write-Header "INSTALLED SOFTWARE (potentially vulnerable)"
 # ============================================================
 
-Write-Check "32-bit & 64-bit software"
+Write-Check "32-bit and 64-bit software"
 $softwareKeys = @(
     "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
     "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
@@ -475,9 +475,9 @@ foreach ($group in @("HIGH","MEDIUM","LOW","INFO")) {
             "LOW"    { "Yellow" }
             default  { "Green" }
         }
-        Write-Host "`n  [$group] — $($g.Count) finding(s):" -ForegroundColor $color
+        Write-Host "`n  [$group] - $($g.Count) finding(s):" -ForegroundColor $color
         $g.Group | ForEach-Object {
-            Write-Host "    • [$($_.Category)] $($_.Title)" -ForegroundColor $color
+            Write-Host "    [*] [$($_.Category)] $($_.Title)" -ForegroundColor $color
             Write-Host "      $($_.Detail)" -ForegroundColor Gray
         }
     }
