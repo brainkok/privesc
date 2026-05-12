@@ -1,4 +1,4 @@
-#Requires -Version 3.0
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Windows Privilege Escalation Checker - Advanced
@@ -110,10 +110,10 @@ Write-Header "SYSTEM INFORMATION"
 # ============================================================
 
 Write-Check "OS version and patch level"
-$os = Get-WmiObject Win32_OperatingSystem
+$os = Get-CimInstance Win32_OperatingSystem
 Write-Info "OS        : $($os.Caption) (Build $($os.BuildNumber)) $($os.OSArchitecture)"
 Write-Info "Version   : $($os.Version)"
-Write-Info "Last boot : $($os.LastBootUpTime)"
+Write-Info "Last boot : $($os.LastBootUpTime.ToString('yyyy-MM-dd HH:mm:ss'))"
 Write-Info "Hostname  : $($env:COMPUTERNAME)"
 Write-Info "Domain    : $($env:USERDOMAIN)"
 
@@ -163,7 +163,9 @@ Write-Header "CURRENT USER AND TOKEN"
 Write-Check "Current user context"
 Write-Info "User     : $($currentUser.Name)"
 Write-Info "Is Admin : $isAdmin"
-$groups = $currentUser.Groups | ForEach-Object { $_.Translate([System.Security.Principal.NTAccount]) } | Select-Object -ExpandProperty Value
+$groups = $currentUser.Groups | ForEach-Object {
+    try { $_.Translate([System.Security.Principal.NTAccount]).Value } catch { $_.Value }
+}
 Write-Info "Groups:"
 $groups | ForEach-Object { Write-Info "  $_" }
 
@@ -181,7 +183,7 @@ if ($groups -match "Backup Operators") {
 }
 
 Write-Check "Token privileges"
-$tokenOutput = whoami /priv 2>$null
+$tokenOutput = (& whoami /priv 2>&1)
 $dangerousPrivs = @{
     "SeImpersonatePrivilege"      = "Potato attacks (PrintSpoofer, GodPotato)"
     "SeAssignPrimaryTokenPrivilege" = "Token swapping for SYSTEM"
@@ -250,7 +252,7 @@ Write-Header "SERVICES - UNQUOTED PATHS"
 # ============================================================
 
 Write-Check "Services with unquoted executable paths"
-$unquotedSvcs = Get-WmiObject Win32_Service | Where-Object {
+$unquotedSvcs = Get-CimInstance Win32_Service | Where-Object {
     $_.PathName -and
     $_.PathName -notmatch '^"' -and
     $_.PathName -match ' ' -and
@@ -288,7 +290,7 @@ Write-Header "SERVICES - WEAK PERMISSIONS"
 # ============================================================
 
 Write-Check "Writable service executables"
-$allSvcs = Get-WmiObject Win32_Service | Where-Object { $_.PathName }
+$allSvcs = Get-CimInstance Win32_Service | Where-Object { $_.PathName }
 foreach ($svc in $allSvcs) {
     $exe = $svc.PathName -replace '"','' -replace ' .*',''
     if (-not $exe -or -not (Test-Path $exe)) { continue }
@@ -312,7 +314,7 @@ foreach ($svc in $allSvcs) {
 Write-Check "Service ACLs (sc sdshow)"
 $svcNames = Get-Service | Select-Object -ExpandProperty Name
 foreach ($name in $svcNames) {
-    $sd = sc.exe sdshow $name 2>$null | Where-Object { $_ -match "D:" }
+    $sd = (& sc.exe sdshow $name 2>&1) | Where-Object { $_ -match "D:" }
     if ($sd -match "A;;[A-Z]*W[A-Z]*;;;WD|A;;[A-Z]*W[A-Z]*;;;BU|A;;GA;;;WD") {
         Add-Finding -Category "Service" -Title "Service ACL allows user modification" `
             -Detail "Service: $name - low-privilege users can change config" -Severity "HIGH"
@@ -501,7 +503,7 @@ Write-Header "STORED CREDENTIALS"
 # ============================================================
 
 Write-Check "Windows Credential Manager"
-$creds = cmdkey /list 2>$null
+$creds = (& cmdkey /list 2>&1)
 if ($creds -match "Target:") {
     $credDetail = ($creds | Where-Object { $_ -match "Target:|User:|Type:" } | Out-String).Trim()
     Add-Finding -Category "Credentials" -Title "Stored credentials in Credential Manager" `
@@ -570,13 +572,13 @@ foreach ($base in $gppPaths) {
 }
 
 Write-Check "WLAN saved credentials"
-$wlanProfiles = netsh wlan show profiles 2>$null
+$wlanProfiles = (& netsh wlan show profiles 2>&1)
 if ($wlanProfiles -match "All User Profile") {
     $profileNames = ($wlanProfiles | Select-String "All User Profile\s*:\s*(.+)") | ForEach-Object {
         $_.Matches.Groups[1].Value.Trim()
     }
     foreach ($profile in $profileNames) {
-        $details = netsh wlan show profile name="$profile" key=clear 2>$null
+        $details = (& netsh wlan show profile name="$profile" key=clear 2>&1)
         if ($details -match "Key Content\s+:\s+(.+)") {
             $key = ($details | Select-String "Key Content\s+:\s+(.+)").Matches.Groups[1].Value
             Add-Finding -Category "Credentials" -Title "WLAN plaintext password found" `
@@ -626,7 +628,7 @@ Write-Header "NETWORK AND SHARES"
 # ============================================================
 
 Write-Check "Local shared folders"
-$shares = Get-WmiObject Win32_Share | Where-Object { $_.Type -le 1 }
+$shares = Get-CimInstance Win32_Share | Where-Object { $_.Type -le 1 }
 foreach ($share in $shares) {
     $label = if ($share.Type -eq 0) { "Disk" } else { "Admin" }
     Write-Info "[$label] $($share.Name) -> $($share.Path)"
@@ -655,7 +657,7 @@ if ($ipv6) {
 }
 
 Write-Check "Listening services"
-$listeners = netstat -ano 2>$null | Select-String "LISTENING"
+$listeners = (& netstat -ano 2>&1) | Select-String "LISTENING"
 Write-Info "Listening ports:"
 $listeners | ForEach-Object { Write-Info "  $($_.Line.Trim())" }
 
@@ -674,7 +676,7 @@ Write-Header "LOCAL USERS AND GROUPS"
 # ============================================================
 
 Write-Check "Local Administrators group members"
-$admins = net localgroup Administrators 2>$null
+$admins = (& net localgroup Administrators 2>&1)
 Write-Info "Administrators:"
 $admins | Select-String "^(?!--|Alias|Members|Comment|The command|$)" | ForEach-Object {
     Write-Info "  $($_.Line.Trim())"
