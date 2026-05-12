@@ -247,18 +247,23 @@ CALL :SectionHeader "SERVICES - WEAK PERMISSIONS"
 CALL :SubHeader "WRITABLE SERVICE EXECUTABLES"
 ECHO.   [i] If you can write the binary a service runs, replace it with your payload
 ECHO.
-where wmic >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    for /f "tokens=2 delims='='" %%a in ('wmic service list full ^| findstr /i "pathname" ^| findstr /i /v "system32"') do (
-        for /f eol^=^"^ delims^=^" %%b in ("%%a") do (
-            icacls "%%b" 2>nul | findstr /i "(F) (M) (W) :\\" | findstr /i ":\\ everyone authenticated users todos %username%" && (
-                CALL :ColorLine "  %E%91m[!!!] Writable service binary: %%b%E%97m"
-                ECHO.
+for /f "tokens=2" %%n in ('sc query state^= all 2^>nul ^| findstr SERVICE_NAME') do (
+    for /f "delims=" %%p in ('sc qc "%%n" 2^>nul ^| findstr "BINARY_PATH_NAME"') do (
+        SET "_ln=%%p"
+        SET "_ln=!_ln:*BINARY_PATH_NAME   : =!"
+        ECHO "!_ln!" | findstr /i "system32" >nul 2>&1 || (
+            IF "!_ln:~0,1!"=="""" (
+                SET "_ln=!_ln:~1!"
+                for /f tokens^=1^ delims^=^" %%q in ("!_ln!") do (
+                    IF EXIST "%%q" icacls "%%q" 2>nul | findstr /i "(F) (M) (W) :\\" | findstr /i ":\\ everyone authenticated users todos %username%" && CALL :ColorLine "  %E%91m[!!!] Writable service binary: %%q%E%97m"
+                )
+            ) ELSE (
+                for /f "tokens=1" %%q in ("!_ln!") do (
+                    IF EXIST "%%q" icacls "%%q" 2>nul | findstr /i "(F) (M) (W) :\\" | findstr /i ":\\ everyone authenticated users todos %username%" && CALL :ColorLine "  %E%91m[!!!] Writable service binary: %%q%E%97m"
+                )
             )
         )
     )
-) else (
-    ECHO.   [-]   wmic not available - skipping binary permission check
 )
 ECHO.
 CALL :T_Progress 2
@@ -266,13 +271,12 @@ CALL :T_Progress 2
 CALL :SubHeader "SERVICE REGISTRY KEY PERMISSIONS"
 ECHO.   [i] If you can modify a service registry key you can change its binary path
 ECHO.
-for /f %%a in ('reg query hklm\system\currentcontrolset\services 2^>nul') do (
-    del %TEMP%\reg_test.hiv >nul 2>&1
-    reg save %%a %TEMP%\reg_test.hiv >nul 2>&1 && reg restore %%a %TEMP%\reg_test.hiv >nul 2>&1 && (
-        CALL :ColorLine "  %E%91m[!!!] You can modify registry key: %%a%E%97m"
+for /f "tokens=2" %%n in ('sc query state^= all 2^>nul ^| findstr SERVICE_NAME') do (
+    reg add "HKLM\SYSTEM\CurrentControlSet\Services\%%n" /v __pe_test__ /t REG_SZ /d x /f >nul 2>&1 && (
+        reg delete "HKLM\SYSTEM\CurrentControlSet\Services\%%n" /v __pe_test__ /f >nul 2>&1
+        CALL :ColorLine "  %E%91m[!!!] Writable service registry key: HKLM\...\Services\%%n%E%97m"
     )
 )
-del %TEMP%\reg_test.hiv >nul 2>&1
 ECHO.
 CALL :T_Progress 2
 
